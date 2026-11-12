@@ -1,0 +1,45 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Unpack project
+        run: |
+          set -e
+          mkdir -p /tmp/work
+          if ls ./*.zip >/dev/null 2>&1; then
+            for z in ./*.zip; do unzip -o -q "$z" -d /tmp/work; done
+          else
+            rsync -a --exclude .git ./ /tmp/work/
+          fi
+          S=$(find /tmp/work -name settings.gradle | head -n1)
+          echo "PROJECT=$(dirname "$S")" >> "$GITHUB_ENV"
+      - name: Build
+        run: |
+          cd "$PROJECT"
+          gradle --no-daemon assembleDebug
+          mkdir -p /tmp/out
+          cp app/build/outputs/apk/debug/app-debug.apk /tmp/out/Plastinka.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plastinka-APK
+          path: /tmp/out/Plastinka.apk
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Plastinka v${{ github.run_number }}
+          files: /tmp/out/Plastinka.apk
